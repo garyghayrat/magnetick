@@ -113,11 +113,7 @@ contract MagnetickHook is BaseHook {
     /// @param key The pool key.
     /// @param tick The initial tick of the pool.
     /// @return The function selector.
-    function _afterInitialize(address, PoolKey calldata key, uint160, int24 tick)
-        internal
-        override
-        returns (bytes4)
-    {
+    function _afterInitialize(address, PoolKey calldata key, uint160, int24 tick) internal override returns (bytes4) {
         PoolId poolId = key.toId();
 
         // Calculate initial tick range centered on the current tick.
@@ -125,11 +121,7 @@ contract MagnetickHook is BaseHook {
         (int24 tickLower, int24 tickUpper) = _calculateTickRange(tick, DEFAULT_TICK_WIDTH, tickSpacing);
 
         poolConfigs[poolId] = PoolConfig({
-            tickLower: tickLower,
-            tickUpper: tickUpper,
-            tickWidth: DEFAULT_TICK_WIDTH,
-            liquidity: 0,
-            initialized: true
+            tickLower: tickLower, tickUpper: tickUpper, tickWidth: DEFAULT_TICK_WIDTH, liquidity: 0, initialized: true
         });
 
         emit PoolRegistered(poolId, DEFAULT_TICK_WIDTH);
@@ -240,26 +232,14 @@ contract MagnetickHook is BaseHook {
         tickUpper = (tickUpper / tickSpacing) * tickSpacing;
     }
 
-    /// @notice Updates the managed liquidity amount for a pool. Called by the vault.
-    /// @param key The pool key.
+    /// @notice Updates the tracked liquidity amount for a pool. Called by the vault.
+    /// @dev This only updates internal accounting. The vault handles actual liquidity modification.
+    /// @param poolId The pool ID.
     /// @param liquidityDelta The change in liquidity (positive to add, negative to remove).
-    function updateLiquidity(PoolKey calldata key, int256 liquidityDelta) external onlyVault {
-        PoolId poolId = key.toId();
+    function updateTrackedLiquidity(PoolId poolId, int256 liquidityDelta) external onlyVault {
         PoolConfig storage config = poolConfigs[poolId];
 
         if (!config.initialized) revert PoolNotRegistered();
-
-        // Modify liquidity in the pool.
-        poolManager.modifyLiquidity(
-            key,
-            ModifyLiquidityParams({
-                tickLower: config.tickLower,
-                tickUpper: config.tickUpper,
-                liquidityDelta: liquidityDelta,
-                salt: POSITION_SALT
-            }),
-            ""
-        );
 
         // Update tracked liquidity using safe casts.
         // Casting to uint256 is safe because we check the sign before casting.
@@ -270,6 +250,15 @@ contract MagnetickHook is BaseHook {
             // forge-lint: disable-next-line(unsafe-typecast)
             config.liquidity -= uint256(-liquidityDelta).toUint128();
         }
+    }
+
+    /// @notice Gets the current tick range for a pool.
+    /// @param poolId The pool ID.
+    /// @return tickLower The lower tick.
+    /// @return tickUpper The upper tick.
+    function getTickRange(PoolId poolId) external view returns (int24 tickLower, int24 tickUpper) {
+        PoolConfig storage config = poolConfigs[poolId];
+        return (config.tickLower, config.tickUpper);
     }
 
     /// @notice Updates the tick width for a pool. Called by the vault.
@@ -305,4 +294,3 @@ contract MagnetickHook is BaseHook {
         return poolConfigs[poolId].initialized;
     }
 }
-
